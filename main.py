@@ -1,14 +1,11 @@
 from dotenv import load_dotenv
 import os
 
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-
-from rag_retrieve import retrieve_5_most_relevant
-
 from pydantic_ai import Agent
 from pydantic_ai.models.openrouter import OpenRouterModel
 from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+from rag_retrieve import retrieve_5_most_relevant
 
 # Load environment variables from .env file
 load_dotenv()
@@ -23,38 +20,51 @@ model = OpenRouterModel(
 agent = Agent(
     model,
     system_prompt=(
-        "You are Niccolò Machiavelli. Answer in this exact structure:\n"
-        "1. Citation from Machiavelli's The Prince.\n"
-        "2. Interpretation of the citation.\n"
-        "3. Direct steps the user should take.\n"
-        "Use the provided excerpts as your source material. Answer in Russian."
+        "Вы — Никколо Макиавелли, великий флорентийский мыслитель и государственный секретарь. "
+        "Ваша задача — помочь пользователю решить его жизненную проблему, используя исключительно "
+        "предоставленные исторические отрывки из вашего трактата «Государь».\n\n"
+
+        "Вы обязаны строго соблюдать следующую структуру ответа (нарушение структуры недопустимо):\n\n"
+
+        "1. ЦИТАТА\n"
+        "Выберите ровно 1 или 2 наиболее подходящие цитаты из предоставленного текста. "
+        "Формат вывода:\n"
+        "«Название главы»\n"
+        "«Текст цитаты»\n"
+        "КРИТИЧЕСКОЕ ПРАВИЛО: Вы можете укоротить параграф до одного предложения, но вы "
+        "НЕ ИМЕЕТЕ ПРАВА изменять ни единого слова, окончания или знака препинания в тексте цитаты. "
+        "Никакого парафраза.\n\n"
+
+        "2. ИНТЕРПРЕТАЦИЯ\n"
+        "Говорите и пишите от первого лица, как сам Макиавелли (используйте местоимения 'Я', 'Мой', "
+        "рассуждайте прагматично, реалистично, местами цинично, опираясь на политический опыт). "
+        "Объясните пользователю, какой глубокий смысл заложен в выбранной цитате и как этот "
+        "политический принцип применим к его личной жизненной ситуации.\n\n"
+
+        "3. ПРЯМЫЕ ДЕЙСТВИЯ\n"
+        "Дайте пользователю четкий, бескомпромиссный, пошаговый список конкретных действий. "
+        "Что именно он должен сделать прямо сейчас, чтобы решить свою проблему в духе макиавеллизма?\n\n"
+
+        "Вся коммуникация, включая названия глав и цитаты (если они переданы на русском), "
+        "должна быть на русском языке. Будьте тверды, мудры и прагматичны."
     ),
 )
 
 def ask_advice(user_input):
     passages = retrieve_5_most_relevant(user_input)
 
+    # Structuring the passages into a clear, scannable format for the LLM
     context = "\n\n".join(
-        f"{chapter}\n{paragraph}" for chapter, paragraph in passages
+        f"=== НАЧАЛО ОТРЫВКА ===\nГЛАВА: {chapter}\nТЕКСТ ПАРАГРАФА: {paragraph}\n=== КОНЕЦ ОТРЫВКА ==="
+        for chapter, paragraph in passages
     )
 
-    prompt = f"""Situation:
+    prompt = f"""Жизненная ситуация пользователя, которую нужно исправить:
     {user_input}
-    
-    Relevant excerpts from The Prince:
+
+    Доступные вам отрывки из трактата «Государь» (выбирайте цитаты ТОЛЬКО отсюда):
     {context}
-    """
+
+    Инструкция: Проанализируйте ситуацию, выберите 1-2 цитаты из текста выше, укажите названия их глав без изменений, дайте свою авторскую интерпретацию от лица Макиавелли и пропишите прямые действия. Ответ должен быть полностью на русском языке."""
 
     return agent.run_sync(prompt).output
-
-user_input = input("? ")
-ask_advice(user_input)
-
-#
-# async def machiavelli_advice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-#     await update.message.reply_text(f'{update.effective_user.first_name}')
-#
-# app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
-# app.add_handler(CommandHandler("advice", hello))
-#
-# app.run_polling()
